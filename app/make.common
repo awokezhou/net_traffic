@@ -1,0 +1,18 @@
+
+APP_PATH := $(subst /app,/app , $(shell pwd))
+APP_PATH  := $(word 1, $(APP_PATH))
+
+
+INC_PATH := $(APP_PATH)/include \
+			$(APP_PATH)/include/core
+
+
+
+LIB_PATH := $(APP_PATH)/lib
+
+
+CFLAGS += -O -Wall #-Werror -word
+CFLAGS += -I$(LIB_PATH)
+
+CC = gcc
+export CC APP_PATH CFLAGS
