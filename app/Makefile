@@ -1,5 +1,5 @@
 
-MAKE_PART = lib core
+MAKE_PART = core
 
 
 .PHONY: $(MAKE_PART)
@@ -16,4 +16,4 @@ clean:
 	done
 
 
-include $(MAKE_PART)/make.common
+include make.common

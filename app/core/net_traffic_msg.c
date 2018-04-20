@@ -157,3 +157,37 @@ nt_ret nt_msg_init(nt_run_mgr *mgr)
 
     return nt_ok;
 }
+
+void nt_msg_free(nt_msg_knl **msg)
+{
+    nt_msg_knl *p;
+
+    if (!msg || !*msg)
+        return;
+
+    p = *msg;
+    
+    if (p->knl_fd)
+        close(p->knl_fd);
+
+    nt_list_unlink(&p->_head);
+    nt_mem_free(p);
+    return;
+}
+
+void nt_msg_clean(nt_run_mgr *mgr)
+{
+    nt_msg_knl *msg;
+    nt_msg_knl *tmp;
+    
+    if (nt_list_empty(&mgr->msg_knl_list))
+        return;
+
+    nt_list_for_each_entry_safe(msg, 
+                                tmp, 
+                                &mgr->msg_knl_list, 
+                                _head) {
+        nt_msg_free(&msg);
+    }
+    return;
+}
