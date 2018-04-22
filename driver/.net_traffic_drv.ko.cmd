@@ -1,1 +1,0 @@
-cmd_/home/awoke/share/developer/test/net_traffic/driver/net_traffic_drv.ko := ld -r -m elf_x86_64 -T ./scripts/module-common.lds --build-id  -o /home/awoke/share/developer/test/net_traffic/driver/net_traffic_drv.ko /home/awoke/share/developer/test/net_traffic/driver/net_traffic_drv.o /home/awoke/share/developer/test/net_traffic/driver/net_traffic_drv.mod.o

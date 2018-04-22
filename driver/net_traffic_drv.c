@@ -10,12 +10,23 @@
 #include <linux/version.h>
 #include <linux/netdevice.h>
 #include <linux/netfilter_ipv4.h>
+#include <linux/proc_fs.h> 
+#include <linux/fs.h>
 
 
 
-#define CONFIG_NET_TRAFFIC_NETLINK     
-//#define CONFIG_NET_TRAFFIC_DEBUG
+#define CONFIG_PROC
+//#define CONFIG_NETLINK     
+#define CONFIG_DEBUG
 
+
+#define FIFO_SIZE   1024
+
+
+typedef struct _net_flow {
+    int num_buf;
+    struct sk_buff *buf[FIFO_SIZE];
+} net_flow;
 
 typedef struct _traffic_entry {
     unsigned int addr;
@@ -53,30 +64,39 @@ typedef struct _traffic_entry_s {
 
 #define MSG_NL_TFC_LIST 0x2000  
 #define MAX_PAYLOAD_LEN 1024
+#define BUFFER_SIZE (1536 + 32 + 2) /* it'll be a 2KB thing anyway...*/
 
 #define NT_F_DEL    10
 
 #define NT_TIME_VAL     10*1000
 #define NT_TIME_INT     5*1000
 
+
+#ifdef CONFIG_NETLINK
 #define NETLINK_NET_TRAFFIC 29
-
-#define NET_TRAFFIC_PROCFILE    "net_traffic"
-
 static int traffic_netlink_pid = 0;
+static struct sock *traffic_netlink_sock = NULL;
+#endif
+
+
+#ifdef CONFIG_PROC
+#define NET_TRAFFIC_PROCFILE    "net_traffic"
+static net_flow *flows = NULL;
+#endif
+
 
 static struct timer_list traffic_timer;
 
 static struct nf_hook_ops traffic_nf_post_route;
 
-static struct sock *traffic_netlink_sock = NULL;
-
 static struct kmem_cache *traffic_entry_cache = NULL;
 
 static LIST_HEAD(traffic_entry_head);
 
-static int traffic_netlink_send(int type, char *data, int len);
 
+#ifdef CONFIG_NETLINK
+static int traffic_netlink_send(int type, char *data, int len);
+#endif
 
 
 static void _traffic_entry_dump(void)
@@ -106,8 +126,13 @@ static void traffic_entry_send(void)
         return;
     
     list_for_each_entry(entry, &traffic_entry_head, list) {
-        if (!entry->f_del || entry->upload || entry->dwload)
+
+        if (!entry->f_del || entry->upload || entry->dwload) {
+            
+#ifdef CONFIG_NETLINK
             traffic_netlink_send(MSG_NL_TFC_LIST, (char *)entry, sizeof(traffic_entry_s));
+#endif
+        }
     }
 }
 
@@ -151,12 +176,12 @@ static void traffic_timer_proc(void)
     int ret = 0;
 
 
-#ifdef CONFIG_NET_TRAFFIC_DEBUG
+#ifdef CONFIG_DEBUG
     _traffic_entry_dump(); // only for debug
 #endif
 
 
-#ifdef CONFIG_NET_TRAFFIC_NETLINK
+#ifdef CONFIG_NETLINK
     traffic_entry_send();
 #endif
 
@@ -277,18 +302,18 @@ unsigned int traffic_post_route(unsigned int hooknum,
     if (!skb || !(iph = ip_hdr(skb)))
         return NF_ACCEPT;
 
-    if (iph->protocol == IPPROTO_TCP) {
-	//if (iph->protocol) {
+    //if (iph->protocol == IPPROTO_TCP) {
+	if (iph->protocol) {
         //tcph = (struct tcphdr *)TCPHDR(skb);
-        traffic_netlink_send(MSG_NL_TFC_LIST, (char *)skb, sizeof(struct sk_buff));
-        //traffic_entry_update(skb, iph, NULL);
+        //traffic_netlink_send(MSG_NL_TFC_LIST, (char *)skb, sizeof(struct sk_buff));
+        traffic_entry_update(skb, iph, NULL);
     }
     
     return NF_ACCEPT;    
 }
 
 
-#ifdef CONFIG_NET_TRAFFIC_NETLINK
+#ifdef CONFIG_NETLINK
 static int group_mask(int group)
 {
     return (1 << group);
@@ -378,6 +403,7 @@ static int net_traffic_netlink_init(void)
 }
 #endif
 
+
 static int net_traffic_entry_init(void)
 {
     traffic_entry_cache = kmem_cache_create("traffic_entry_cache",
@@ -422,6 +448,91 @@ static int net_traffic_timer_init(void)
     return ret;
 }
 
+#ifdef CONFIG_PROC
+static int proc_read(char *page, 
+                                  char **start, 
+                                  off_t off, 
+                                  int count, 
+                                  int *eof, 
+                                  void *data)  
+{  
+    char message[256];
+    sprintf(message, "flows: 0x%p %d %ld\n", 
+	        flows, FIFO_SIZE, flows->num_buf); 
+
+    return 0;
+}  
+
+static int proc_write(struct file *filp, 
+                                   const char __user *buf, 
+                                   unsigned long count, 
+                                   void *data)  
+{  
+    return 0;  
+}  
+
+static int proc_open(struct inode *inode, struct file *file)
+{
+    return 0;  
+}
+
+static const struct file_operations proc_fops =   
+{  
+    .owner      = THIS_MODULE,  
+    .open       = proc_open,  
+    .read       = proc_read,  
+    .write      = proc_write,   
+};  
+
+static int net_traffic_proc_init(void)
+{
+    int i;
+    struct proc_dir_entry *file;
+    
+    flows = (net_flow *)kmalloc(sizeof(net_flow), GFP_KERNEL);
+    if (!flows) {
+        printk("kmalloc error\n");
+        return -1;
+    }
+
+    memset(flows, 0, sizeof(net_flow));
+    flows->num_buf = 0;
+
+    for (i=0; i<FIFO_SIZE; i++) {
+        struct sk_buff * skb;
+        skb = dev_alloc_skb(BUFFER_SIZE);
+        if (!skb) {
+            break;
+        }
+
+        flows->buf[i] = skb;
+    }
+
+    file = proc_create(NET_TRAFFIC_PROCFILE, 0, NULL, &proc_fops);   
+    if (!file) {  
+        printk("Cannot create /proc/jif\n");  
+        return -1;  
+    }  
+
+    return 0;  
+}
+
+static void net_traffic_proc_exit(void)
+{
+    int i;
+    
+    if (flows) {
+
+        for (i=0; i<FIFO_SIZE; i++) {
+            dev_kfree_skb(flows->buf[i]);
+        }
+
+        kfree(flows);
+    }
+
+    remove_proc_entry(NET_TRAFFIC_PROCFILE, NULL);
+}
+#endif
 
 static int __init net_traffic_init(void)
 {
@@ -436,14 +547,22 @@ static int __init net_traffic_init(void)
     ret = net_traffic_hook_init();
     if (ret < 0) {
         printk("net traffic hook init error, ret %d\n", ret);
-        goto out3;       
+        goto out4;       
     }
 
-#ifdef CONFIG_NET_TRAFFIC_NETLINK
+#ifdef CONFIG_NETLINK
     ret = net_traffic_netlink_init();
     if (ret < 0) {
         printk("net fraffic netlink init error, ret %d\n", ret);
-        goto out2;  
+        goto out3;  
+    }
+#endif
+
+#ifdef CONFIG_PROC
+    ret = net_traffic_proc_init();
+    if (ret < 0) {
+        printk("net traffic proc init error, ret %d\n", ret);
+        goto out2;
     }
 #endif
 
@@ -456,16 +575,27 @@ static int __init net_traffic_init(void)
 
     return 0;
 
+
+
 out1:
-#ifdef CONFIG_NET_TRAFFIC_NETLINK
+#ifdef CONFIG_PROC
+    net_traffic_proc_exit();
+#endif
+  
+
+out2:
+#ifdef CONFIG_NETLINK
     net_traffic_netlink_exit();
 #endif
 
-out2:
+
+out3:
     nf_unregister_hook(&traffic_nf_post_route);
     
-out3:
+    
+out4:
     net_traffic_entry_destory();
+
 
     return -1;
 }
@@ -478,15 +608,18 @@ static void __exit net_traffic_exit(void)
     if (ret)
         printk("net traffic timer is still use...\n");
 
+
+#ifdef CONFIG_PROC
+    net_traffic_proc_exit();
+#endif
+
+#ifdef CONFIG_NETLINK
+    net_traffic_netlink_exit();
+#endif   
+
     net_traffic_entry_destory();
 
     nf_unregister_hook(&traffic_nf_post_route);
-
-
-#ifdef CONFIG_NET_TRAFFIC_NETLINK
-    net_traffic_netlink_exit();
-#endif
-
 }
 
 module_init(net_traffic_init);
