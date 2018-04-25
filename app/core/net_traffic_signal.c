@@ -1,5 +1,4 @@
 #include "nt_core.h"
-#include "nt_print.h"
 
 #include <string.h>
 #include <signal.h>

@@ -1,19 +1,27 @@
 
-MAKE_PART = core
+
+EXEC = $(BIN_PATH)/net_traffic_app
+OBJ_FILES = $(wildcard $(OBJ_PATH)/*.o)
+COMPILE_PATH = core
 
 
-.PHONY: $(MAKE_PART)
-all: $(MAKE_PART)
+all: compile  build
 
 
-$(MAKE_PART):
-	$(MAKE) -C $@
+.PHONY:compile
+compile: $(COMPILE_PATH)
+	@echo "-------compile-----------"
+	$(MAKE) -C $^
 
 
+.PHONY:build
+build:
+	$(CC) $(LFLAGS) $(CFLAGS) -o $(EXEC) $(OBJ_FILES) $(LIBS)
+
+
+.PHONY:clean
 clean:
-	for dir in $(MAKE_PART); do \
-		$(MAKE) -C $$dir clean; \
-	done
+	-rm -rf $(OBJ_FILES) $(EXEC)
 
 
 include make.common

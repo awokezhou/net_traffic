@@ -34,7 +34,9 @@ typedef enum
     nt_err_parser,
     nt_err_response,
     nt_err_file_open,
+    nt_err_file_read,
     nt_err_file_send,
+    nt_err_file_mmap,
     nt_need_sendmore,
 } nt_ret;
 

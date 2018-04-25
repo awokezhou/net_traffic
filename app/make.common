@@ -1,18 +1,21 @@
 
 APP_PATH := $(subst /app,/app , $(shell pwd))
-APP_PATH  := $(word 1, $(APP_PATH))
+APP_PATH := $(word 1, $(APP_PATH))
 
+KNL_PATH := /lib/modules/`uname -r`/build
 
-INC_PATH := $(APP_PATH)/include \
-			$(APP_PATH)/include/core
+INC_PATH := -I$(APP_PATH)/include \
+			-I$(APP_PATH)/include/core 
+			#-I$(KNL_PATH)/include 
 
-
-
-LIB_PATH := $(APP_PATH)/lib
+OBJ_PATH = $(APP_PATH)/obj
+LIB_PATH = $(APP_PATH)/lib
+BIN_PATH = $(APP_PATH)/bin
 
 
 CFLAGS += -O -Wall #-Werror -word
-CFLAGS += -I$(LIB_PATH)
+#CFLAGS += $(LIB_PATH)
+CFLAGS += $(INC_PATH)
 
 CC = gcc
-export CC APP_PATH CFLAGS
+export CC APP_PATH CFLAGS OBJ_PATH LIB_PATH BIN_PATH

@@ -13,6 +13,23 @@
 #include <linux/proc_fs.h> 
 #include <linux/fs.h>
 
+#include <linux/string.h>
+#include <linux/mm.h>
+#include <linux/interrupt.h>
+#include <linux/in.h>
+#include <linux/tty.h>
+#include <linux/errno.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
+#include <linux/rtnetlink.h>
+#include <linux/if_arp.h>
+#include <linux/if_slip.h>
+#include <linux/init.h>
+
+#include <linux/proc_fs.h>
+#include <linux/fs.h>
+
 
 
 #define CONFIG_PROC
@@ -20,8 +37,7 @@
 #define CONFIG_DEBUG
 
 
-#define FIFO_SIZE   1024
-
+#define FIFO_SIZE   10
 
 typedef struct _net_flow {
     int num_buf;
@@ -41,6 +57,11 @@ typedef struct _traffic_entry_s {
     unsigned long long upload;
     unsigned long long dwload;
 } traffic_entry_s;
+
+typedef struct {
+    traffic_entry_s *entry[FIFO_SIZE];
+    int num;
+} array_entry;
 
 #ifndef IP_DUMP_FMT
 #define IP_DUMP_FMT "%u.%u.%u.%u"
@@ -82,6 +103,8 @@ static struct sock *traffic_netlink_sock = NULL;
 #ifdef CONFIG_PROC
 #define NET_TRAFFIC_PROCFILE    "net_traffic"
 static net_flow *flows = NULL;
+static array_entry *array = NULL;
+#define MMAP_MEM_SIZE (PAGE_SIZE * 2)  
 #endif
 
 
@@ -449,55 +472,51 @@ static int net_traffic_timer_init(void)
 }
 
 #ifdef CONFIG_PROC
-static int proc_read(char *page, 
-                                  char **start, 
-                                  off_t off, 
-                                  int count, 
-                                  int *eof, 
-                                  void *data)  
-{  
-    char message[256];
-    sprintf(message, "flows: 0x%p %d %ld\n", 
-	        flows, FIFO_SIZE, flows->num_buf); 
 
-    return 0;
-}  
-
-static int proc_write(struct file *filp, 
-                                   const char __user *buf, 
-                                   unsigned long count, 
-                                   void *data)  
-{  
-    return 0;  
-}  
-
-static int proc_open(struct inode *inode, struct file *file)
+static int proc_mmap(struct file *filp, struct vm_area_struct *vma)  
 {
-    return 0;  
+    int ret;
+    struct page *page = NULL;
+    unsigned long size = (unsigned long)(vma->vm_end - vma->vm_start); 
+
+    if (size > MMAP_MEM_SIZE)  
+    {  
+        ret = -EINVAL;  
+        goto err;  
+    } 
+
+    page = virt_to_page((unsigned long)array + (vma->vm_pgoff << PAGE_SHIFT));
+    ret = remap_pfn_range(vma, 
+                          vma->vm_start, 
+                          page_to_pfn(page), 
+                          size, 
+                          vma->vm_page_prot);
+    if (ret)
+        goto err;
+    
+    return 0;
+    
+err:
+    return ret;
 }
 
-static const struct file_operations proc_fops =   
+static struct file_operations proc_fops =  
 {  
-    .owner      = THIS_MODULE,  
-    .open       = proc_open,  
-    .read       = proc_read,  
-    .write      = proc_write,   
+    .owner = THIS_MODULE,  
+    .mmap = proc_mmap,  
 };  
 
 static int net_traffic_proc_init(void)
 {
     int i;
-    struct proc_dir_entry *file;
-    
-    flows = (net_flow *)kmalloc(sizeof(net_flow), GFP_KERNEL);
+ /*   
+    flows = kmalloc(MMAP_MEM_SIZE, GFP_KERNEL);
     if (!flows) {
         printk("kmalloc error\n");
         return -1;
     }
-
     memset(flows, 0, sizeof(net_flow));
-    flows->num_buf = 0;
-
+    
     for (i=0; i<FIFO_SIZE; i++) {
         struct sk_buff * skb;
         skb = dev_alloc_skb(BUFFER_SIZE);
@@ -508,19 +527,43 @@ static int net_traffic_proc_init(void)
         flows->buf[i] = skb;
     }
 
-    file = proc_create(NET_TRAFFIC_PROCFILE, 0, NULL, &proc_fops);   
-    if (!file) {  
-        printk("Cannot create /proc/jif\n");  
-        return -1;  
-    }  
+    flows->buf[0]->len = 25;
+    flows->buf[1]->len = 26;
 
+    flows->num_buf = 57;
+*/
+
+    array = kmalloc(MMAP_MEM_SIZE, GFP_KERNEL);
+     if (!array) {
+        printk("kmalloc error\n");
+        return -1;
+    }
+     for (i=0; i<FIFO_SIZE; i++) {
+        traffic_entry_s *entry;
+            entry = kmalloc(sizeof(traffic_entry_s), GFP_KERNEL);
+            if (!entry) {
+                printk("kmalloc error\n");
+                break;
+        }
+        array->entry[i] = entry;
+     }
+     printk("kmalloc ok\n");
+
+    array->num = 67;
+    array->entry[0]->addr = 0x2345;
+    array->entry[1]->addr = 0x6789;
+
+    struct proc_dir_entry *proc_file = 
+        proc_create(NET_TRAFFIC_PROCFILE, 0x0644, NULL, &proc_fops);
+
+    
     return 0;  
 }
 
 static void net_traffic_proc_exit(void)
 {
     int i;
-    
+/*  
     if (flows) {
 
         for (i=0; i<FIFO_SIZE; i++) {
@@ -529,8 +572,17 @@ static void net_traffic_proc_exit(void)
 
         kfree(flows);
     }
+    */
 
-    remove_proc_entry(NET_TRAFFIC_PROCFILE, NULL);
+    if (array) {
+   
+        for (i=0; i<FIFO_SIZE; i++) {
+            kfree(array->entry[i]);
+        }
+        kfree(array);
+    }
+
+    remove_proc_entry(NET_TRAFFIC_PROCFILE, NULL);  
 }
 #endif
 
@@ -624,4 +676,3 @@ static void __exit net_traffic_exit(void)
 
 module_init(net_traffic_init);
 module_exit(net_traffic_exit);
-

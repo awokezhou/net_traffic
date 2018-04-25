@@ -1,13 +1,4 @@
-#include <fcntl.h>
-#include <time.h>
-#include <netinet/tcp.h>
-#include <sys/un.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-
+#include "nt_core.h"
 
 
 int web_socket_create(int domain, int type, int protocol)
@@ -28,3 +19,14 @@ int web_socket_create(int domain, int type, int protocol)
     return fd;
 }
 
+bool nt_socket_fd_read_ready(int fd)
+{
+    uint32_t read_count = 0;
+    
+    ioctl(fd, FIONREAD, &read_count);
+
+    if (read_count == 0)
+        return FALSE;
+    else
+        return TRUE;
+}

@@ -239,7 +239,7 @@ static inline nt_event_ctx *nt_event_loop_ctx_create(int size)
     /* Allocate space for events queue, re-use the struct mk_event */
     ctx->events = nt_mem_alloc_z(sizeof(nt_event *) * size);
     if (!ctx->events) {
-        web_mem_free(ctx);
+        nt_mem_free(ctx);
         return NULL;
     }
 

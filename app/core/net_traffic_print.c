@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "nt_print.h"
+#include "nt_core.h"
 
 
 void nt_print(int level, const char *func, int line, const char *format, ...)

@@ -1,8 +1,7 @@
-#include "nt_core.h"
 #include "nt_mgr.h"
+#include "nt_core.h"
 
-
-
+#include <getopt.h>
 
 void nt_help(int ex)
 {
@@ -62,7 +61,7 @@ nt_run_prm *nt_param_parse(int argc, char *argvs[])
         return NULL;        
     }
 
-    nt_debug("web param create ok");
+    nt_debug("param create ok");
 
     static const struct option long_opts[] = {
         {"daemon",      no_argument,        NULL,   'd'},
@@ -89,6 +88,8 @@ nt_run_prm *nt_param_parse(int argc, char *argvs[])
                 nt_help(NT_EXIT_SUCCESS);
         }
     }    
+
+    return param;
 }
 
 nt_run_mgr *nt_run_mgr_create(nt_run_prm *param)
@@ -118,8 +119,6 @@ void nt_run_mgr_destory(nt_run_mgr **mgr)
 
     if (p->param)
         nt_run_prm_clean(&p->param);
-
-    nt_msg_clean(mgr);
     
     nt_mem_free(p);
     return;
@@ -162,58 +161,46 @@ nt_ret nt_core_init(nt_run_mgr *run_mgr)
     if (run_mgr->param->daemon)
         nt_run_daemon();
 
-    nt_msg_init(run_mgr);
+    return nt_ok;
+}
+
+nt_ret nt_proc_read(nt_run_mgr *run_mgr)
+{
+    int kfd; 
+
+    kfd = open(DEV_NAME, O_RDWR|O_NDELAY);
+    if (kfd < 0) {
+        nt_err("open %s error", DEV_NAME);
+        return nt_err_file_open;
+    }
+
+    array_entry *array = (array_entry *)mmap(0, MMAP_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, kfd, 0);
+    if (!array) {
+        nt_err("mmap error");
+        close(kfd);
+        return nt_err_file_mmap;
+    }
+
+    nt_debug("num %d", array->num);
+    nt_debug("entry[0] addr %d", array->entry[0]->addr);
+    nt_debug("entry[1] addr %d", array->entry[1]->addr);
+    munmap(array, MMAP_MEM_SIZE);  
 
     return nt_ok;
 }
 
-
 nt_ret nt_run_loop(nt_run_mgr *run_mgr)
 {
-    nt_msg_knl *msg;
-    nt_event *event;
-    nt_event_loop *evl;
     nt_ret ret = nt_ok;
-
-    evl = nt_event_loop_create(run_mgr, NT_EVENT_QUEUE_SIZE);
-    if (!evl)
-    {
-        nt_err("server event create error");
-        return nt_err_nomem;
-    }
-
-    /* Register the listeners */
-    nt_list_for_each_entry(msg, &run_mgr->msg_knl_list, _head) {
-        nt_event_add(evl, msg->knl_fd, 
-                      NT_EVENT_LISTENER, NT_EVENT_READ,
-                      msg);
-    }
 
     while (1) 
     {
-        nt_event_wait(evl);
-        nt_event_foreach(event, evl) {
-            
-            if (!nt_event_ready(event, evl))
-                continue;
+        sleep(5);
 
-            ret = 0;
-            if (event->type & NT_EVENT_IDLE) {
-                continue;
-            }
-
-            if (event->type == NT_EVENT_CONNECTION) {
-                nt_debug("type NT_EVENT_CONNECTION");
-            } 
-            else if (event->type == NT_EVENT_LISTENER) {
-                nt_debug("type NT_EVENT_LISTENER");
-            }
-            else if (event->type == NT_EVENT_CUSTOM) {
-                nt_debug("type NT_EVENT_CUSTOM");
-            }
-            else if (event->type == NT_EVENT_NOTIFICATION) {
-                nt_debug("type NT_EVENT_NOTIFICATION");
-            }
+        ret = nt_proc_read(run_mgr);
+        if (nt_ok != ret)
+        {
+            nt_err("proc read error, ret %d", ret);
         }
     }
 }
@@ -240,7 +227,7 @@ int main(int argc, char *argv[])
     }
     
     ret = nt_core_init(run_mgr);
-    if (nt_ok != nt_ret)
+    if (nt_ok != ret)
     {
         nt_err("core init error, ret %d", ret);
         goto err;
