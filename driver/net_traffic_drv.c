@@ -30,7 +30,8 @@
 #include <linux/proc_fs.h>
 #include <linux/fs.h>
 
-
+#include "net_traffic_drv.h"
+#include "nt_netlink.h"
 
 #define CONFIG_PROC
 //#define CONFIG_NETLINK     
@@ -208,8 +209,11 @@ static void traffic_timer_proc(void)
     traffic_entry_send();
 #endif
 
+    array->num++;
 
     traffic_entry_clean();
+
+    print_test();
 
     ret = mod_timer(&traffic_timer, jiffies + msecs_to_jiffies(NT_TIME_INT));
     if (ret) printk("traffic mod_timer error\n");

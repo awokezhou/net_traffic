@@ -1,10 +1,13 @@
-obj-m=net_traffic_drv.o
+
+MODULE_NAME = net_traffic
+
+obj-m := $(MODULE_NAME).o
+$(MODULE_NAME)-objs := 
+$(MODULE_NAME)-objs += nt_netlink.o
+$(MODULE_NAME)-objs += net_traffic_drv.o
 
 modules:
 	make -C /lib/modules/`uname -r`/build/ M=`pwd` modules
-	#make -C /usr/src/kernels/3.10.0-514.el7.x86_64 M='pwd' modules
-	make clean_obj
-
 
 .PHONY: clean_obj
 clean_obj:
@@ -12,4 +15,5 @@ clean_obj:
 
 .PHONY: clean
 clean:
-	rm -f *.ko
+	rm -f *.o *.ko *.mod.* *.symvers .$(MODULE_NAME).* .*.o.cmd
+	rm -fr .tmp_versions

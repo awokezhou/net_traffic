@@ -3,6 +3,12 @@
 
 #include <getopt.h>
 
+
+
+
+
+
+
 void nt_help(int ex)
 {
     printf("usage : net_traffic [option]\n\n");
@@ -182,9 +188,9 @@ nt_ret nt_proc_read(nt_run_mgr *run_mgr)
     }
 
     nt_debug("num %d", array->num);
-    nt_debug("entry[0] addr %d", array->entry[0]->addr);
-    nt_debug("entry[1] addr %d", array->entry[1]->addr);
-    munmap(array, MMAP_MEM_SIZE);  
+    //nt_debug("entry[0] addr %d", array->entry[0]->addr);
+    //nt_debug("entry[1] addr %d", array->entry[1]->addr);
+    //munmap(array, MMAP_MEM_SIZE);  
 
     return nt_ok;
 }
