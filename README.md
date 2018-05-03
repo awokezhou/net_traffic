@@ -12,3 +12,10 @@ driver：Linux内核钩子，在网络数据流经的INPUT、FORWARD、OUTPUT等
 app：实现数据包到流的转化，主要是分析TCP流，初步得到流的基本特性
 
 anaylze：python脚本，使用神经网络算法对流进行训练和分类
+
+## 特性
+
+服务器端口号、最大/小TCP分段大小、TCP域前5个字节、IP数据包的最大字节数、Ethernet包的最大字节数、平均段大小、TCP控制字节的中位数(双向)、初始窗口大小(双向)
+
+## 参考文献
+[1] Ang Kun Joo Michael, Emma Valla, Natinael Solomon Neggatu, Andrew W.Moore. Network traffic classification via neural networks. Technical reports published by the University of Cambridege Computer Laboratory are freely available via the Internet, September 2017.
