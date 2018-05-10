@@ -4,6 +4,7 @@ MODULE_NAME = net_traffic
 obj-m := $(MODULE_NAME).o
 $(MODULE_NAME)-objs := 
 $(MODULE_NAME)-objs += nt_netlink.o
+$(MODULE_NAME)-objs += nt_fifo.o
 $(MODULE_NAME)-objs += net_traffic_drv.o
 
 modules:

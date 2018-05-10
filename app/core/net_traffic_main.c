@@ -1,5 +1,6 @@
 #include "nt_mgr.h"
 #include "nt_core.h"
+#include "nt_flow.h"
 
 #include <getopt.h>
 
@@ -13,6 +14,7 @@ void nt_help(int ex)
 {
     printf("usage : net_traffic [option]\n\n");
 
+    printf("    -c,      --flow class\t\t\label traffic type\n");
     printf("    -d,      --daemon\t\t\trun net_traffic as daemon\n");
     printf("    -i ethx, --bind interface\n");
 
@@ -72,11 +74,11 @@ nt_run_prm *nt_param_parse(int argc, char *argvs[])
     static const struct option long_opts[] = {
         {"daemon",      no_argument,        NULL,   'd'},
         {"interface",   required_argument,  NULL,   'i'},
-        {""},
+        {"flow calss",  required_argument,  NULL,   'c'},
         {NULL, 0, NULL, 0}
     };    
 
-    while ((opt = getopt_long(argc, argvs, "di?h:", long_opts, NULL)) != -1)
+    while ((opt = getopt_long(argc, argvs, "dic:?h:", long_opts, NULL)) != -1)
     {
         switch (opt)
         {
@@ -86,6 +88,10 @@ nt_run_prm *nt_param_parse(int argc, char *argvs[])
                 
             case 'i':
                 param->intf = nt_string_dup(optarg);
+                break;
+
+            case 'c':
+                param->fcls = nt_string_dup(optarg);
                 break;
 
             case '?':
@@ -167,32 +173,60 @@ nt_ret nt_core_init(nt_run_mgr *run_mgr)
     if (run_mgr->param->daemon)
         nt_run_daemon();
 
+    nt_flow_init(run_mgr);
+
     return nt_ok;
 }
 
 nt_ret nt_proc_read(nt_run_mgr *run_mgr)
 {
     int kfd; 
-
+    nt_ret ret = nt_ok;
+    net_fifo_ctl *fifo_ctl = NULL;
+        
     kfd = open(DEV_NAME, O_RDWR|O_NDELAY);
     if (kfd < 0) {
         nt_err("open %s error", DEV_NAME);
         return nt_err_file_open;
     }
 
-    array_entry *array = (array_entry *)mmap(0, MMAP_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, kfd, 0);
-    if (!array) {
+    fifo_ctl = (net_fifo_ctl *)mmap(0, 
+                                                  MMAP_MEM_SIZE, 
+                                                  PROT_READ | PROT_WRITE, 
+                                                  MAP_SHARED, 
+                                                  kfd, 
+                                                  0);
+    if (!fifo_ctl) {
         nt_err("mmap error");
         close(kfd);
         return nt_err_file_mmap;
     }
+    /*
+    nt_debug("**************** mmap info *****************");
+    nt_debug("mmap size : %d Byte\n", MMAP_MEM_SIZE);
+    nt_debug("fifo size : %d\n", fifo_ctl->fifo_size);
+    nt_debug("fifo pull : %d \n", fifo_ctl->fifo_pull);
+*/
+    ret = nt_flow_process(fifo_ctl, run_mgr);
+    if (nt_ok != ret)
+    {
+        nt_err("flow process error");
+        goto out;
+    }
 
-    nt_debug("num %d", array->num);
-    //nt_debug("entry[0] addr %d", array->entry[0]->addr);
-    //nt_debug("entry[1] addr %d", array->entry[1]->addr);
-    //munmap(array, MMAP_MEM_SIZE);  
+    ret = nt_flow_save(run_mgr);
+    if (nt_ok != ret)
+    {
+        nt_err("flow save error");
+        goto out;    
+    }
 
-    return nt_ok;
+out:
+    if (fifo_ctl)
+        munmap(fifo_ctl, MMAP_MEM_SIZE);
+    if (kfd>0)
+        close(kfd);
+    return ret;
 }
 
 nt_ret nt_run_loop(nt_run_mgr *run_mgr)

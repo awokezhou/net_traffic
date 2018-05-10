@@ -34,6 +34,53 @@
 #include <linux/proc_fs.h>
 #include <linux/fs.h>
 
+
+
+
+typedef struct _traffic_entry {
+    unsigned int addr;
+    unsigned int f_del;
+    unsigned long long upload;
+    unsigned long long dwload;
+    struct list_head list;
+} traffic_entry_t;
+
+typedef struct _traffic_entry_s {
+    unsigned int addr;
+    unsigned long long upload;
+    unsigned long long dwload;
+} traffic_entry_s;
+
+#ifndef IP_DUMP_FMT
+#define IP_DUMP_FMT "%u.%u.%u.%u"
+#endif 
+
+#ifndef TCPHDR
+#define TCPHDR(skb) ((char*)(skb)->data+iph->ihl*4)
+#endif 
+
+#ifndef IP_DUMP
+#define IP_DUMP(addr) \
+    ((unsigned char *)&addr)[0],\
+    ((unsigned char *)&addr)[1],\
+    ((unsigned char *)&addr)[2],\
+    ((unsigned char *)&addr)[3]
+#endif
+
+#ifndef MAX_LOAD
+#define MAX_LOAD    0xffffffffffffff00
+#endif
+
+#define MSG_NL_TFC_LIST 0x2000  
+#define MAX_PAYLOAD_LEN 1024
+#define BUFFER_SIZE (1536 + 32 + 2) /* it'll be a 2KB thing anyway...*/
+
+#define NT_F_DEL    10
+
+#define NT_TIME_VAL     10*1000
+#define NT_TIME_INT     5*1000
+
+
 typedef struct _net_flow_ctl_knl_t{
 
     int port;           /* server port number */
@@ -73,6 +120,30 @@ typedef struct _net_flow_ctl_knl_t{
     int median_ctl_in_pkt_cs;   /* median number of control bytes in each packet client->server */
     int median_ctl_in_pkt_sc;   /* median number of control bytes in each packet server->client */
 } net_flow_ctl_knl_t;
+
+typedef enum {
+    def = 0,
+    c_to_s,
+    s_to_c,
+} net_pkt_f;
+
+typedef struct _net_pkt_t {
+
+    uint16_t f_cs:1,
+             f_psh:1,
+             f_segm:1,
+             f_syn:1,
+             f_ack;
+
+    uint16_t port;
+    uint16_t window;
+    uint8_t ip_pkt_median;
+
+    int segm_len;
+    int ip_len;
+    int eth_len;
+    
+} net_pkt_t;
 
 
 #endif /* __NET_TRAFFIC_DRV_H__ */

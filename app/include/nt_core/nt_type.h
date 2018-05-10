@@ -38,6 +38,7 @@ typedef enum
     nt_err_file_send,
     nt_err_file_mmap,
     nt_need_sendmore,
+    nt_err_flow_pull,
 } nt_ret;
 
 #ifndef int8_t

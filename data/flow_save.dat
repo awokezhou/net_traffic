@@ -1,0 +1,51 @@
+[flow save file]
+[Characteristics]:
+[Character 1] <port> : server port
+[Character 2] <tlt_pkts> : total number of data packets
+[Character 3] <init_win_cs> : number of bytes in initial window client->server
+[Character 4] <init_win_sc> : number of bytes in initial window server->client
+[Character 5] <min_sgm_cs> : minimum segment size client->server
+[Character 6] <min_sgm_sc> : minimum segment size server->client
+[Character 7] <max_sgm_cs> : maximum segment size client->server
+[Character 8] <max_sgm_sc> : maximum segment size server->client
+[Character 9] <max_ip_cs> : maximum number of bytes in IP package client->server
+[Character 10] <max_ip_sc> : maximum number of bytes in IP package server->client
+[Character 11] <psh_ack_cs> : number of data packet with PUSH bit in TCP header client->server
+[Character 12] <psh_ack_sc> : number of data packet with PUSH bit in TCP header server->client
+[Character 13] <sgm_ack_cs> : number of segments cumulatively acknowledged client->server
+[Character 14] <sgm_ack_sc> : number of segments cumulatively acknowledged server->client
+
+[Data]:
+443, 3, 229, 119, 250, 255, 250, 255, 255, 52, 1, 0, 2, 1, [WEB]
+443, 3, 229, 119, 250, 255, 250, 255, 255, 52, 1, 0, 2, 1, [WEB]
+443, 3, 229, 119, 250, 255, 250, 255, 255, 52, 1, 0, 2, 1, [WEB]
+443, 3, 229, 119, 250, 255, 250, 255, 255, 52, 1, 0, 2, 1, [WEB]
+443, 3, 229, 119, 250, 255, 250, 255, 255, 52, 1, 0, 2, 1, [WEB]
+443, 3, 229, 119, 250, 255, 250, 255, 255, 52, 1, 0, 2, 1, [WEB]
+443, 3, 229, 119, 250, 255, 250, 255, 255, 52, 1, 0, 2, 1, [WEB]
+80, 33, 418, 260, 122, 95, 137, 96, 987, 7286, 3, 5, 17, 16, [WEB]
+443, 3, 229, 119, 250, 255, 250, 255, 255, 52, 1, 0, 2, 1, [WEB]
+80, 66, 418, 260, 122, 95, 137, 96, 987, 7286, 6, 10, 34, 32, [WEB]
+443, 3, 229, 119, 250, 255, 250, 255, 255, 52, 1, 0, 2, 1, [WEB]
+80, 83, 418, 260, 122, 95, 176, 100, 2824, 7286, 7, 11, 43, 40, [WEB]
+443, 8, 29200, 26847, 8, 8, 250, 255, 255, 60, 2, 0, 4, 3, [WEB]
+80, 91, 418, 260, 122, 95, 186, 101, 2824, 7286, 7, 12, 46, 45, [WEB]
+443, 8, 29200, 26847, 8, 8, 250, 255, 255, 60, 2, 0, 4, 3, [WEB]
+80, 106, 418, 260, 122, 95, 212, 104, 2824, 7286, 8, 13, 53, 53, [WEB]
+443, 11, 29200, 26847, 8, 8, 250, 255, 255, 60, 2, 0, 6, 4, [WEB]
+80, 106, 418, 260, 122, 95, 212, 104, 2824, 7286, 8, 13, 53, 53, [WEB]
+443, 11, 29200, 26847, 8, 8, 250, 255, 255, 60, 2, 0, 6, 4, [WEB]
+80, 114, 418, 260, 122, 95, 248, 107, 2824, 7286, 8, 14, 57, 57, [WEB]
+443, 13, 29200, 26847, 8, 8, 252, 255, 255, 60, 2, 0, 8, 4, [WEB]
+80, 153, 418, 260, 12, 95, 248, 109, 2824, 7286, 8, 15, 75, 78, [WEB]
+443, 18, 29200, 26847, 8, 8, 252, 255, 259, 60, 3, 0, 10, 6, [WEB]
+80, 183, 418, 260, 12, 95, 248, 111, 2824, 7286, 9, 16, 93, 90, [WEB]
+443, 18, 29200, 26847, 8, 8, 252, 255, 259, 60, 3, 0, 10, 6, [WEB]
+80, 208, 418, 260, 12, 95, 248, 113, 2824, 7286, 10, 18, 104, 104, [WEB]
+443, 19, 29200, 26847, 8, 8, 252, 255, 259, 60, 3, 0, 11, 6, [WEB]
+80, 211, 418, 260, 12, 95, 248, 115, 2824, 7286, 10, 18, 105, 106, [WEB]
+443, 21, 29200, 26847, 8, 8, 252, 255, 259, 60, 3, 0, 13, 6, [WEB]
+80, 221, 418, 260, 12, 95, 248, 116, 2824, 7292, 10, 19, 110, 111, [WEB]
+443, 21, 29200, 26847, 8, 8, 252, 255, 259, 60, 3, 0, 13, 6, [WEB]
+80, 238, 418, 260, 12, 95, 248, 119, 2824, 7292, 11, 20, 119, 119, [WEB]
+443, 21, 29200, 26847, 8, 8, 252, 255, 259, 60, 3, 0, 13, 6, [WEB]

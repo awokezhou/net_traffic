@@ -1,126 +1,39 @@
-#include <net/ip.h>
-#include <net/tcp.h>
-#include <linux/init.h>
-#include <linux/slab.h>
-#include <linux/inet.h>
-#include <linux/timer.h>
-#include <linux/module.h>
-#include <linux/socket.h>
-#include <linux/skbuff.h>
-#include <linux/version.h>
-#include <linux/netdevice.h>
-#include <linux/netfilter_ipv4.h>
-#include <linux/proc_fs.h> 
-#include <linux/fs.h>
-
-#include <linux/string.h>
-#include <linux/mm.h>
-#include <linux/interrupt.h>
-#include <linux/in.h>
-#include <linux/tty.h>
-#include <linux/errno.h>
-#include <linux/netdevice.h>
-#include <linux/etherdevice.h>
-#include <linux/skbuff.h>
-#include <linux/rtnetlink.h>
-#include <linux/if_arp.h>
-#include <linux/if_slip.h>
-#include <linux/init.h>
-
-#include <linux/proc_fs.h>
-#include <linux/fs.h>
 
 #include "net_traffic_drv.h"
 #include "nt_netlink.h"
+#include "nt_fifo.h"
 
 #define CONFIG_PROC
 //#define CONFIG_NETLINK     
-#define CONFIG_DEBUG
-
-
-#define FIFO_SIZE   10
-
-typedef struct _net_flow {
-    int num_buf;
-    struct sk_buff *buf[FIFO_SIZE];
-} net_flow;
-
-typedef struct _traffic_entry {
-    unsigned int addr;
-    unsigned int f_del;
-    unsigned long long upload;
-    unsigned long long dwload;
-    struct list_head list;
-} traffic_entry_t;
-
-typedef struct _traffic_entry_s {
-    unsigned int addr;
-    unsigned long long upload;
-    unsigned long long dwload;
-} traffic_entry_s;
-
-typedef struct {
-    traffic_entry_s *entry[FIFO_SIZE];
-    int num;
-} array_entry;
-
-#ifndef IP_DUMP_FMT
-#define IP_DUMP_FMT "%u.%u.%u.%u"
-#endif 
-
-#ifndef TCPHDR
-#define TCPHDR(skb) ((char*)(skb)->data+iph->ihl*4)
-#endif 
-
-#ifndef IP_DUMP
-#define IP_DUMP(addr) \
-    ((unsigned char *)&addr)[0],\
-    ((unsigned char *)&addr)[1],\
-    ((unsigned char *)&addr)[2],\
-    ((unsigned char *)&addr)[3]
-#endif
-
-#ifndef MAX_LOAD
-#define MAX_LOAD    0xffffffffffffff00
-#endif
-
-#define MSG_NL_TFC_LIST 0x2000  
-#define MAX_PAYLOAD_LEN 1024
-#define BUFFER_SIZE (1536 + 32 + 2) /* it'll be a 2KB thing anyway...*/
-
-#define NT_F_DEL    10
-
-#define NT_TIME_VAL     10*1000
-#define NT_TIME_INT     5*1000
-
-
-#ifdef CONFIG_NETLINK
-#define NETLINK_NET_TRAFFIC 29
-static int traffic_netlink_pid = 0;
-static struct sock *traffic_netlink_sock = NULL;
-#endif
+//#define CONFIG_DEBUG
 
 
 #ifdef CONFIG_PROC
 #define NET_TRAFFIC_PROCFILE    "net_traffic"
-static net_flow *flows = NULL;
-static array_entry *array = NULL;
-#define MMAP_MEM_SIZE (PAGE_SIZE * 2)  
+static char *mmap_mem = NULL;
+#define MMAP_MEM_SIZE (PAGE_SIZE * 8)  
 #endif
 
+extern net_fifo_ctl *fifo_ctl;
+extern int fifo_clean;
 
 static struct timer_list traffic_timer;
 
 static struct nf_hook_ops traffic_nf_post_route;
+
+static struct nf_hook_ops traffic_nf_pre_route;
 
 static struct kmem_cache *traffic_entry_cache = NULL;
 
 static LIST_HEAD(traffic_entry_head);
 
 
-#ifdef CONFIG_NETLINK
-static int traffic_netlink_send(int type, char *data, int len);
-#endif
+int nt_skb_receive(const struct sk_buff *skb, 
+                         const struct iphdr *iph,
+                         const struct tcphdr *tcph,
+                         net_pkt_f flag);
+
+
 
 
 static void _traffic_entry_dump(void)
@@ -199,21 +112,17 @@ static void traffic_timer_proc(void)
 {
     int ret = 0;
 
-
 #ifdef CONFIG_DEBUG
     _traffic_entry_dump(); // only for debug
 #endif
 
+    printk("TIMER : fifo pull %d\n", fifo_ctl->fifo_pull);
 
 #ifdef CONFIG_NETLINK
     traffic_entry_send();
 #endif
 
-    array->num++;
-
     traffic_entry_clean();
-
-    print_test();
 
     ret = mod_timer(&traffic_timer, jiffies + msecs_to_jiffies(NT_TIME_INT));
     if (ret) printk("traffic mod_timer error\n");
@@ -315,10 +224,10 @@ static void net_traffic_entry_destory(void)
 }
 
 unsigned int traffic_post_route(unsigned int hooknum,
-                            struct sk_buff *__skb,
-                            const struct net_device *in,
-                            const struct net_device *out,
-                            int (*okfn)(struct sk_buff *))
+                                         struct sk_buff *__skb,
+                                         const struct net_device *in,
+                                         const struct net_device *out,
+                                         int (*okfn)(struct sk_buff *))
 {
     struct iphdr *iph;
     struct sk_buff *skb;
@@ -329,107 +238,98 @@ unsigned int traffic_post_route(unsigned int hooknum,
     if (!skb || !(iph = ip_hdr(skb)))
         return NF_ACCEPT;
 
-    //if (iph->protocol == IPPROTO_TCP) {
-	if (iph->protocol) {
-        //tcph = (struct tcphdr *)TCPHDR(skb);
+    if (iph->protocol == IPPROTO_TCP) {
+	//if (iph->protocol) {
+        tcph = (struct tcphdr *)TCPHDR(skb);
+        nt_skb_receive(skb, iph, tcph, c_to_s);
         //traffic_netlink_send(MSG_NL_TFC_LIST, (char *)skb, sizeof(struct sk_buff));
-        traffic_entry_update(skb, iph, NULL);
+        //traffic_entry_update(skb, iph, NULL);
     }
     
     return NF_ACCEPT;    
 }
 
-
-#ifdef CONFIG_NETLINK
-static int group_mask(int group)
+int skb_is_segm(const struct sk_buff *skb)
 {
-    return (1 << group);
+    if (skb->data[46] == 0)
+        return 0;
+    else 
+        return 1;
 }
 
-static int traffic_netlink_send(int type, char *data, int len)
-{    
-    int pid = traffic_netlink_pid;
-    unsigned int load = NLMSG_SPACE(len);
-    struct sk_buff *skb =  NULL;
-    struct nlmsghdr *msgh = NULL;
-    struct sock *sock = traffic_netlink_sock;
-    
-    if(!pid || !sock || !data) {
-        return -1;
-    } 
+int nt_skb_receive(const struct sk_buff *skb, 
+                         const struct iphdr *iph,
+                         const struct tcphdr *tcph,
+                         net_pkt_f flag)
+{
+    net_pkt_t *pkt;
 
-    if(data && (len > MAX_PAYLOAD_LEN)) {
+    if (!skb || !iph)
         return -1;
-    } 
-    
-    skb = alloc_skb(load, GFP_ATOMIC);
-    if(!skb) {
-        return -1;
+
+    if (fifo_clean) {
+        fifo_clean = 0;
+        nt_fifo_refresh();
     }
-    
-    memset((void*)skb, 0, load);
-    msgh = nlmsg_put(skb, 0, 0, type, len, 0);
-    memcpy(NLMSG_DATA(msgh), data, len);
-    
-    //NETLINK_CB(skb).pid = 0; /*from kernel */
-    NETLINK_CB(skb).dst_group = group_mask(0); 
-    
-    netlink_unicast(traffic_netlink_sock, skb, 
-        traffic_netlink_pid, MSG_DONTWAIT);
-    
-    return 0;
-}
 
-static void traffic_netlink_recv(struct sk_buff *skb)
-{
-    struct nlmsghdr *nlh = nlmsg_hdr(skb);
-    traffic_netlink_pid = nlh->nlmsg_pid;
-    printk("traffic_netlink_pid %d\n", traffic_netlink_pid);
-}
+    pkt = nt_fifo_get_pkt();
+    if (!pkt)
+        return 0;
 
-static void net_traffic_netlink_exit(void)
-{
-	if (traffic_netlink_sock){
-		sock_release(traffic_netlink_sock->sk_socket);
-		printk("net traffic netlink exit...\n");
-	}
-}
-
-static int net_traffic_netlink_init(void)
-{
-    struct net init_net;
-
-    memset(&init_net, 0x0, sizeof(init_net));
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24))  
-    traffic_netlink_sock = netlink_kernel_create(NETLINK_NET_TRAFFIC, 
-                                                 0, 
-                                                 traffic_netlink_recv, 
-                                                 THIS_MODULE); 
-
-#elif (LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0))
-    traffic_netlink_sock = netlink_kernel_create(&init_net, 
-                                        NETLINK_NET_TRAFFIC, 
-                                        0, 
-                                        traffic_netlink_recv);
-#else
-    struct netlink_kernel_cfg traffic_netlink_cfg = {
-        .input  = traffic_netlink_recv,
-    };
-    traffic_netlink_sock = netlink_kernel_create(&init_net, 
-                                                 NETLINK_NET_TRAFFIC, 
-                                                 &traffic_netlink_cfg); 
-#endif
-    
-
-    if(!traffic_netlink_sock) {
-        printk("net traffic netlink init error\n");
-        return -1;
+    if (flag == s_to_c) {
+        pkt->f_cs = 0;
+        pkt->port = ntohs(tcph->source);
+    } else if (flag = c_to_s) {
+        pkt->f_cs = 1;
+        pkt->port = ntohs(tcph->dest);
     }
-	return 0;
-}
-#endif
 
+    pkt->window = ntohs(tcph->window);
+
+    pkt->f_psh = tcph->psh;
+    pkt->f_segm = skb_is_segm(skb);
+    pkt->f_syn = tcph->syn;
+    pkt->f_ack = tcph->ack;
+
+    if (pkt->f_segm) {
+        pkt->segm_len = skb->data[46];
+    }
+
+    pkt->eth_len = skb->len;
+
+    pkt->ip_len = ntohs(iph->tot_len);
+
+    /*
+    printk("port %d\n", pkt->port);
+    printk("ip_len %d\n", pkt->ip_len);
+    printk("eth_len %d\n", pkt->eth_len);
+    printk("window %d\n", pkt->window);
+    printk("\n", pkt->port);
+    */
+}
+
+unsigned int traffic_pre_route(unsigned int hooknum,
+                                       struct sk_buff *__skb,
+                                       const struct net_device *in,
+                                       const struct net_device *out,
+                                       int (*okfn)(struct sk_buff *))
+{
+    struct iphdr *iph;
+    struct sk_buff *skb;
+    struct tcphdr *tcph;
+
+    skb = __skb;
+
+    if (!skb || !(iph = ip_hdr(skb)))
+        return NF_ACCEPT;
+
+    if (iph->protocol == IPPROTO_TCP) {
+        tcph = (struct tcphdr *)tcp_hdr(skb);
+        nt_skb_receive(skb, iph, tcph, s_to_c);
+    }
+
+    return NF_ACCEPT;    
+}
 
 static int net_traffic_entry_init(void)
 {
@@ -446,7 +346,7 @@ static int net_traffic_entry_init(void)
 static int net_traffic_hook_init(void)
 {
     int ret;
-
+    
     //hook at netfilter IP protocol post routing   
     
     traffic_nf_post_route.pf = AF_INET;
@@ -458,6 +358,15 @@ static int net_traffic_hook_init(void)
         printk("net fraffic register post route hook error, ret %d\n", ret);
         return ret;
     } 
+    traffic_nf_pre_route.pf = AF_INET;
+    traffic_nf_pre_route.hook = traffic_pre_route;
+    traffic_nf_pre_route.priority = NF_IP_PRI_FIRST;
+    traffic_nf_pre_route.hooknum = NF_INET_PRE_ROUTING;
+    ret = nf_register_hook(&traffic_nf_pre_route);
+    if (ret < 0) {
+        printk("net fraffic register pre route hook error, ret %d\n", ret);
+        return ret;
+    }
     return ret;
 }
 
@@ -489,12 +398,14 @@ static int proc_mmap(struct file *filp, struct vm_area_struct *vma)
         goto err;  
     } 
 
-    page = virt_to_page((unsigned long)array + (vma->vm_pgoff << PAGE_SHIFT));
+    page = virt_to_page((unsigned long)mmap_mem + (vma->vm_pgoff << PAGE_SHIFT));
     ret = remap_pfn_range(vma, 
                           vma->vm_start, 
                           page_to_pfn(page), 
                           size, 
                           vma->vm_page_prot);
+    //nt_fifo_refresh();
+    fifo_clean = 1;
     if (ret)
         goto err;
     
@@ -513,49 +424,22 @@ static struct file_operations proc_fops =
 static int net_traffic_proc_init(void)
 {
     int i;
- /*   
-    flows = kmalloc(MMAP_MEM_SIZE, GFP_KERNEL);
-    if (!flows) {
+    uint32_t fifo_size;
+    uint32_t fifo_control_size;
+
+    mmap_mem = kmalloc(MMAP_MEM_SIZE, GFP_KERNEL);
+     if (!mmap_mem) {
         printk("kmalloc error\n");
         return -1;
     }
-    memset(flows, 0, sizeof(net_flow));
-    
-    for (i=0; i<FIFO_SIZE; i++) {
-        struct sk_buff * skb;
-        skb = dev_alloc_skb(BUFFER_SIZE);
-        if (!skb) {
-            break;
-        }
 
-        flows->buf[i] = skb;
-    }
+    fifo_control_size = sizeof(net_fifo_ctl);
+    fifo_size = sizeof(net_pkt_t)*FIFO_SIZE;
 
-    flows->buf[0]->len = 25;
-    flows->buf[1]->len = 26;
+    printk("fifo_control_size %d, fifo_size %d\n", fifo_control_size, fifo_size);
+    printk("mem size %d\n", MMAP_MEM_SIZE);
 
-    flows->num_buf = 57;
-*/
-
-    array = kmalloc(MMAP_MEM_SIZE, GFP_KERNEL);
-     if (!array) {
-        printk("kmalloc error\n");
-        return -1;
-    }
-     for (i=0; i<FIFO_SIZE; i++) {
-        traffic_entry_s *entry;
-            entry = kmalloc(sizeof(traffic_entry_s), GFP_KERNEL);
-            if (!entry) {
-                printk("kmalloc error\n");
-                break;
-        }
-        array->entry[i] = entry;
-     }
-     printk("kmalloc ok\n");
-
-    array->num = 67;
-    array->entry[0]->addr = 0x2345;
-    array->entry[1]->addr = 0x6789;
+    nt_fifo_init(mmap_mem);
 
     struct proc_dir_entry *proc_file = 
         proc_create(NET_TRAFFIC_PROCFILE, 0x0644, NULL, &proc_fops);
@@ -567,23 +451,9 @@ static int net_traffic_proc_init(void)
 static void net_traffic_proc_exit(void)
 {
     int i;
-/*  
-    if (flows) {
 
-        for (i=0; i<FIFO_SIZE; i++) {
-            dev_kfree_skb(flows->buf[i]);
-        }
-
-        kfree(flows);
-    }
-    */
-
-    if (array) {
-   
-        for (i=0; i<FIFO_SIZE; i++) {
-            kfree(array->entry[i]);
-        }
-        kfree(array);
+    if (mmap_mem) {
+        kfree(mmap_mem);
     }
 
     remove_proc_entry(NET_TRAFFIC_PROCFILE, NULL);  
@@ -628,7 +498,6 @@ static int __init net_traffic_init(void)
         goto out1;        
     }
 
-
     return 0;
 
 
@@ -647,7 +516,7 @@ out2:
 
 out3:
     nf_unregister_hook(&traffic_nf_post_route);
-    
+    nf_unregister_hook(&traffic_nf_pre_route);
     
 out4:
     net_traffic_entry_destory();
@@ -676,7 +545,10 @@ static void __exit net_traffic_exit(void)
     net_traffic_entry_destory();
 
     nf_unregister_hook(&traffic_nf_post_route);
+    nf_unregister_hook(&traffic_nf_pre_route);
 }
 
 module_init(net_traffic_init);
 module_exit(net_traffic_exit);
+
+ 
