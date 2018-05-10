@@ -20,7 +20,7 @@ doc: 说明文档
 anaylze：python脚本，使用神经网络算法对流进行训练和分类
 
 ## 引导
-- [driver设计文档及工作原理介绍](https://github.com/awokezhou/LinuxPage/blob/master/Network/README.md)
+- [driver设计文档及工作原理介绍](https://github.com/awokezhou/net_traffic/blob/master/doc/driver.md)
 
 - [app设计文档及工作原理介绍](https://github.com/awokezhou/LinuxPage/blob/master/Network/README.md)
 
