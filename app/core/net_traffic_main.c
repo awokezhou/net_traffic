@@ -182,6 +182,7 @@ nt_ret nt_proc_read(nt_run_mgr *run_mgr)
 {
     int kfd; 
     nt_ret ret = nt_ok;
+    char *mmap_mem = NULL;
     net_fifo_ctl *fifo_ctl = NULL;
         
     kfd = open(DEV_NAME, O_RDWR|O_NDELAY);
@@ -190,35 +191,35 @@ nt_ret nt_proc_read(nt_run_mgr *run_mgr)
         return nt_err_file_open;
     }
 
-    fifo_ctl = (net_fifo_ctl *)mmap(0, 
-                                                  MMAP_MEM_SIZE, 
-                                                  PROT_READ | PROT_WRITE, 
-                                                  MAP_SHARED, 
-                                                  kfd, 
-                                                  0);
-    if (!fifo_ctl) {
+    mmap_mem = (char *)mmap(0, 
+                            MMAP_MEM_SIZE, 
+                            PROT_READ | PROT_WRITE, 
+                            MAP_SHARED, 
+                            kfd, 
+                            0);
+    if (!mmap_mem) {
         nt_err("mmap error");
         close(kfd);
         return nt_err_file_mmap;
     }
-    /*
+
+    fifo_ctl = (net_fifo_ctl *)mmap_mem;
+
+    /*    
     nt_debug("**************** mmap info *****************");
     nt_debug("mmap size : %d Byte\n", MMAP_MEM_SIZE);
     nt_debug("fifo size : %d\n", fifo_ctl->fifo_size);
     nt_debug("fifo pull : %d \n", fifo_ctl->fifo_pull);
-*/
+    */
+    
+    
+    //nt_flow_pkt_save(fifo_ctl);
+
     ret = nt_flow_process(fifo_ctl, run_mgr);
     if (nt_ok != ret)
     {
         nt_err("flow process error");
         goto out;
-    }
-
-    ret = nt_flow_save(run_mgr);
-    if (nt_ok != ret)
-    {
-        nt_err("flow save error");
-        goto out;    
     }
 
 out:
@@ -231,9 +232,10 @@ out:
 
 nt_ret nt_run_loop(nt_run_mgr *run_mgr)
 {
+    int loop = 7;
     nt_ret ret = nt_ok;
 
-    while (1) 
+    while (loop > 0) 
     {
         sleep(5);
 
@@ -242,7 +244,12 @@ nt_ret nt_run_loop(nt_run_mgr *run_mgr)
         {
             nt_err("proc read error, ret %d", ret);
         }
+
+        loop--;
     }
+
+    nt_debug("break loop, will save flow to file");
+    return nt_flow_save(run_mgr);
 }
 
 int main(int argc, char *argv[])

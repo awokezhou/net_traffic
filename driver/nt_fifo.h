@@ -23,5 +23,7 @@ typedef struct {
 net_pkt_t *nt_fifo_get_pkt(void);
 int nt_fifo_init(const char *mmap_addr);
 void nt_fifo_refresh(void);
+void nt_fifo_print();
+
 
 #endif /* __NT_FIFO_H__ */

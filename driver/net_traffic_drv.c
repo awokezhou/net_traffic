@@ -116,7 +116,7 @@ static void traffic_timer_proc(void)
     _traffic_entry_dump(); // only for debug
 #endif
 
-    printk("TIMER : fifo pull %d\n", fifo_ctl->fifo_pull);
+    //printk("TIMER : fifo pull %d\n", fifo_ctl->fifo_pull);
 
 #ifdef CONFIG_NETLINK
     traffic_entry_send();
@@ -249,12 +249,23 @@ unsigned int traffic_post_route(unsigned int hooknum,
     return NF_ACCEPT;    
 }
 
-int skb_is_segm(const struct sk_buff *skb)
+int pkt_is_segm(const net_pkt_t *pkt)
 {
-    if (skb->data[46] == 0)
+    if (pkt->ip_len == TCP_ACK_LEN ||
+        pkt->ip_len == TCP_UPW_LEN ||
+        pkt->ip_len == TCP_RET_LEN) {
         return 0;
-    else 
+    }
+
+    if (pkt->ip_len > TCP_ACK_LEN)
         return 1;
+    else 
+        return 0;
+}
+
+int pkt_get_segmlen(const net_pkt_t *pkt)
+{
+    return (pkt->ip_len - TCP_ACK_LEN);
 }
 
 int nt_skb_receive(const struct sk_buff *skb, 
@@ -272,6 +283,8 @@ int nt_skb_receive(const struct sk_buff *skb,
         nt_fifo_refresh();
     }
 
+    //nt_skb_print(skb->data, skb->len);
+    
     pkt = nt_fifo_get_pkt();
     if (!pkt)
         return 0;
@@ -283,28 +296,33 @@ int nt_skb_receive(const struct sk_buff *skb,
         pkt->f_cs = 1;
         pkt->port = ntohs(tcph->dest);
     }
-
-    pkt->window = ntohs(tcph->window);
-
+    
     pkt->f_psh = tcph->psh;
-    pkt->f_segm = skb_is_segm(skb);
     pkt->f_syn = tcph->syn;
     pkt->f_ack = tcph->ack;
 
-    if (pkt->f_segm) {
-        pkt->segm_len = skb->data[46];
-    }
-
-    pkt->eth_len = skb->len;
-
     pkt->ip_len = ntohs(iph->tot_len);
+    pkt->window = ntohs(tcph->window);
 
+    pkt->f_segm = pkt_is_segm(pkt);
+    if (pkt->f_segm == 1) 
+        pkt->segm_len = pkt_get_segmlen(pkt);
+    else 
+        pkt->segm_len = 0;
+
+    //printk("pkt->f_segm %d, segm_len %d\n", pkt->f_segm, pkt->segm_len);
+   
     /*
-    printk("port %d\n", pkt->port);
-    printk("ip_len %d\n", pkt->ip_len);
-    printk("eth_len %d\n", pkt->eth_len);
-    printk("window %d\n", pkt->window);
-    printk("\n", pkt->port);
+    printk("%5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d\n",
+        pkt->port,
+        pkt->eth_len,
+        pkt->f_ack,
+        pkt->f_cs,
+        pkt->f_psh,
+        pkt->f_segm,
+        pkt->f_syn,
+        pkt->segm_len,
+        pkt->window);
     */
 }
 
@@ -404,7 +422,7 @@ static int proc_mmap(struct file *filp, struct vm_area_struct *vma)
                           page_to_pfn(page), 
                           size, 
                           vma->vm_page_prot);
-    //nt_fifo_refresh();
+    //nt_fifo_print();
     fifo_clean = 1;
     if (ret)
         goto err;

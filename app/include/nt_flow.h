@@ -66,8 +66,6 @@ typedef struct _net_pkt_t {
 
     int segm_len;
     int ip_len;
-    int eth_len;
-    
 } net_pkt_t;
 
 

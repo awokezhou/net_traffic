@@ -103,7 +103,7 @@ file_close:
 void nt_flow_fill_cs(net_flow_t *flow, net_pkt_t *pkt)
 {
     // init window
-    if (pkt->f_syn || flow->init_win_byte_cs == 0) {
+    if (pkt->f_syn && flow->init_win_byte_cs == 0) {
         flow->init_win_byte_cs = pkt->window;
     }
 
@@ -139,7 +139,7 @@ void nt_flow_fill_cs(net_flow_t *flow, net_pkt_t *pkt)
 void nt_flow_fill_sc(net_flow_t *flow, net_pkt_t *pkt)
 {
     // init window
-    if (pkt->f_syn || flow->init_win_byte_sc == 0) {
+    if (pkt->f_syn && flow->init_win_byte_sc == 0) {
         flow->init_win_byte_sc = pkt->window;
     }    
 
@@ -273,7 +273,7 @@ nt_ret nt_flow_process(net_fifo_ctl *fifo_ctl, nt_run_mgr *mgr)
     fifo_size = fifo_ctl->fifo_size;
     fifo_pull = fifo_ctl->fifo_pull;
 
-    base = fifo_ctl + sizeof(net_fifo_ctl);
+    base = (net_pkt_t *)(fifo_ctl+1);
 
     for (i=0; i<fifo_pull; i++)
     {
@@ -281,7 +281,7 @@ nt_ret nt_flow_process(net_fifo_ctl *fifo_ctl, nt_run_mgr *mgr)
 
         if (nt_flow_pkt_invalid(p_pkt))
             continue;
-            
+
         ret = nt_flow_pull_pkt(p_pkt, mgr);
         if (nt_ok != ret)
         {
@@ -290,7 +290,7 @@ nt_ret nt_flow_process(net_fifo_ctl *fifo_ctl, nt_run_mgr *mgr)
         }
     }
 
-    nt_flow_print(mgr);
+    //nt_flow_print(mgr);
 
     return nt_ok;
 }
@@ -299,7 +299,7 @@ nt_ret nt_flow_save(nt_run_mgr *mgr)
 {
     FILE *fp = NULL;
     net_flow_t *flow;
-    char line[256] = {"\0"};
+    char line[512] = {"\0"};
 
     fp = fopen(mgr->save_file, "a+");
     if (!fp) {
@@ -309,7 +309,7 @@ nt_ret nt_flow_save(nt_run_mgr *mgr)
 
     nt_list_for_each_entry(flow, &mgr->flow_list, _head) {
 
-        sprintf(line, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, [%s]\n", 
+        sprintf(line, "%8d, %8d, %8d, %8d, %8d, %8d, %8d, %8d, %8d, %8d, %8d, %8d, %8d, %8d, [%5s]\n", 
                 flow->port,
                 flow->total_data_pkts,
                 flow->init_win_byte_cs,
@@ -330,6 +330,58 @@ nt_ret nt_flow_save(nt_run_mgr *mgr)
         memset(line, 0x0, 256);     
     }
 
+    if (fp)
+        fclose(fp);
+
+    return nt_ok;
+}
+
+void nt_flow_pkt_save(net_fifo_ctl *ctl)
+{   
+    int i;
+    FILE *fp = NULL;
+    char line[256] = {"\0"};    
+    net_pkt_t *pkt;
+    net_pkt_t *base;
+
+    base = (net_pkt_t *)(ctl+1);
+
+    fp = fopen("data/pkt_file", "a+");
+    if (!fp) {
+        nt_err("fopen data/pkt_file error");
+        return nt_err_file_open;
+    }   
+    
+    nt_debug("fifo_pull %d", ctl->fifo_pull);
+    sprintf(line, "\n\nfifo_pull %d\n", ctl->fifo_pull);
+    fputs(line, fp);
+    memset(line, 0x0, 256);  
+
+    for (i=0; i<ctl->fifo_pull; i++)
+    {
+        pkt = base + i;
+        sprintf(line, "%5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d\n",
+            pkt->port,
+            pkt->f_ack,
+            pkt->f_cs,
+            pkt->f_psh,
+            pkt->f_segm,
+            pkt->f_syn,
+            pkt->segm_len,
+            pkt->window);
+        fputs(line, fp);
+        memset(line, 0x0, 256);
+        nt_debug("%5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d",
+            pkt->port,
+            pkt->f_ack,
+            pkt->f_cs,
+            pkt->f_psh,
+            pkt->f_segm,
+            pkt->f_syn,
+            pkt->segm_len,
+            pkt->window);
+    } 
+    
     if (fp)
         fclose(fp);
 

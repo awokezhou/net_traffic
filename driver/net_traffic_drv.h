@@ -80,6 +80,9 @@ typedef struct _traffic_entry_s {
 #define NT_TIME_VAL     10*1000
 #define NT_TIME_INT     5*1000
 
+#define TCP_ACK_LEN     52
+#define TCP_RET_LEN     60
+#define TCP_UPW_LEN     64
 
 typedef struct _net_flow_ctl_knl_t{
 
@@ -141,9 +144,17 @@ typedef struct _net_pkt_t {
 
     int segm_len;
     int ip_len;
-    int eth_len;
-    
 } net_pkt_t;
+
+
+#define nt_skb_print(data, rc) do {\
+                int __i;\
+                for (__i=0; __i<rc; __i++){\
+                    if (!(__i%16)){\
+                        printk("\n");}\
+                    printk("%2x ", data[__i]);}\
+                printk("\n\n");\
+            }while(0)
 
 
 #endif /* __NET_TRAFFIC_DRV_H__ */
